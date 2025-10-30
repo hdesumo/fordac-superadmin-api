@@ -1,10 +1,25 @@
+// src/routes/superAdminRoutes.js
 import express from "express";
-import { loginSuperAdmin, changePassword } from "../controllers/superAdminController.js";
-import { verifySuperAdmin } from "../middleware/authSuperAdmin.js";
+import {
+  loginSuperAdmin,
+  changePassword,
+  verifyToken,
+  verifySuperAdmin,
+  getEvents,
+  createEvent,
+  deleteEvent,
+} from "../controllers/superAdminController.js";
 
 const router = express.Router();
 
-router.post("/login", loginSuperAdmin);
-router.post("/change-password", verifySuperAdmin, changePassword);
+// 🔑 Authentification & sécurité
+router.post("/superadmin/login", loginSuperAdmin);
+router.post("/superadmin/change-password", verifyToken, changePassword);
+router.get("/superadmin/verify", verifyToken, verifySuperAdmin);
+
+// 📅 Gestion des événements
+router.get("/events", verifyToken, getEvents);
+router.post("/events", verifyToken, createEvent);
+router.delete("/events/:id", verifyToken, deleteEvent);
 
 export default router;

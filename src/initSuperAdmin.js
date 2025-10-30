@@ -1,30 +1,38 @@
 import bcrypt from "bcryptjs";
 import { pool } from "./config/db.js";
 
+/**
+ * Script d’initialisation du SuperAdmin FORDAC
+ * -----------------------------------------------------
+ * Ce script :
+ *  - Supprime tout ancien SuperAdmin existant
+ *  - Crée un nouveau compte avec mot de passe hashé
+ *  - Affiche le résultat dans la console
+ */
+
 const initSuperAdmin = async () => {
   try {
-    const password = "FORDAC@2025"; // mot de passe initial
-    const hash = await bcrypt.hash(password, 10);
+    console.log("🧹 Suppression de tout ancien SuperAdmin...");
+    await pool.query("DELETE FROM superadmin");
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS superadmin (
-        id SERIAL PRIMARY KEY,
-        password TEXT NOT NULL
-      );
-    `);
+    const username = "superadmin";
+    const password = "FORDAC@2025";
 
-    const existing = await pool.query("SELECT * FROM superadmin");
-    if (existing.rows.length === 0) {
-      await pool.query("INSERT INTO superadmin (password) VALUES ($1)", [hash]);
-      console.log("✅ SuperAdmin initialisé avec succès !");
-    } else {
-      console.log("ℹ️ Un SuperAdmin existe déjà.");
-    }
+    console.log("🔐 Hash du mot de passe...");
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    process.exit();
+    console.log("🧱 Insertion du nouveau SuperAdmin...");
+    const result = await pool.query(
+      "INSERT INTO superadmin (username, password) VALUES ($1, $2) RETURNING *",
+      [username, hashedPassword]
+    );
+
+    console.log("✅ SuperAdmin initialisé avec succès !");
+    console.table(result.rows);
   } catch (err) {
     console.error("❌ Erreur d'initialisation :", err.message);
-    process.exit(1);
+  } finally {
+    await pool.end();
   }
 };
 
