@@ -1,4 +1,3 @@
-// src/config/db.js
 import pkg from "pg";
 const { Pool } = pkg;
 import dotenv from "dotenv";
@@ -10,11 +9,14 @@ if (!process.env.DB_URL) {
   process.exit(1);
 }
 
-export const pool = new Pool({
+const pool = new Pool({
   connectionString: process.env.DB_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-pool.connect()
+pool
+  .connect()
   .then(() => console.log("✅ Connecté à PostgreSQL (via DB_URL)"))
   .catch((err) => console.error("❌ Erreur PostgreSQL :", err.message));
+
+export default pool;
