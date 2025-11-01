@@ -6,9 +6,9 @@ import { sendResetPasswordEmail } from "../services/mailService.js";
 
 const router = express.Router();
 
-// ================================
-// 🧠 Middleware : Vérification du token JWT
-// ================================
+/* ============================================================
+   🧩 Middleware : Vérification du token JWT
+============================================================ */
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -23,23 +23,23 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// ======================================
-// 🪶 Fonction utilitaire : journaliser une action admin
-// ======================================
+/* ============================================================
+   🪶 Fonction utilitaire : journaliser une action
+============================================================ */
 async function logAdminActivity(adminId, action, ip, device) {
   try {
     await pool.query(
       "INSERT INTO admin_activity (admin_id, action, ip_address, device) VALUES ($1, $2, $3, $4)",
-      [adminId, action, ip || "Inconnu", device || "Navigateur"]
+      [adminId || null, action, ip || "Inconnu", device || "Système"]
     );
   } catch (error) {
     console.error("⚠️ Erreur journalisation activité :", error.message);
   }
 }
 
-// ================================
-// 🔑 Connexion du SuperAdmin
-// ================================
+/* ============================================================
+   🔑 Connexion du SuperAdmin
+============================================================ */
 router.post("/superadmin-login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -62,7 +62,7 @@ router.post("/superadmin-login", async (req, res) => {
       { expiresIn: "8h" }
     );
 
-    // Journalisation de la connexion
+    // 🔹 Journalisation
     await logAdminActivity(user.id, "Connexion du SuperAdmin", req.ip, "Dashboard");
 
     res.json({
@@ -76,9 +76,9 @@ router.post("/superadmin-login", async (req, res) => {
   }
 });
 
-// ================================
-// 📬 Réinitialisation du mot de passe
-// ================================
+/* ============================================================
+   📬 Envoi du lien de réinitialisation
+============================================================ */
 router.post("/superadmin-reset", async (req, res) => {
   const { email } = req.body;
 
@@ -88,6 +88,7 @@ router.post("/superadmin-reset", async (req, res) => {
       return res.status(404).json({ message: "Adresse e-mail introuvable." });
     }
 
+    const user = result.rows[0];
     const resetToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "30m" });
     const resetTokenExpires = new Date(Date.now() + 30 * 60 * 1000);
 
@@ -99,6 +100,9 @@ router.post("/superadmin-reset", async (req, res) => {
     const resetLink = `https://fordac-superadmin.vercel.app/reset-password/confirm/${resetToken}`;
     await sendResetPasswordEmail(email, resetLink);
 
+    // 🔹 Journalisation
+    await logAdminActivity(user.id, "Demande de réinitialisation du mot de passe", req.ip, "Interface Web");
+
     res.json({ message: "E-mail de réinitialisation envoyé avec succès." });
   } catch (error) {
     console.error("Erreur superadmin-reset :", error);
@@ -106,9 +110,9 @@ router.post("/superadmin-reset", async (req, res) => {
   }
 });
 
-// ================================
-// 🔒 Confirmation et mise à jour du mot de passe
-// ================================
+/* ============================================================
+   🔒 Confirmation de réinitialisation
+============================================================ */
 router.post("/superadmin-reset/confirm", async (req, res) => {
   const { token, password } = req.body;
 
@@ -117,11 +121,16 @@ router.post("/superadmin-reset/confirm", async (req, res) => {
     const email = decoded.email;
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await pool.query("SELECT id FROM superadmins WHERE email = $1", [email]);
+    const superadminId = result.rows[0]?.id;
 
     await pool.query(
       "UPDATE superadmins SET password = $1, reset_token = NULL, reset_token_expires = NULL WHERE email = $2",
       [hashedPassword, email]
     );
+
+    // 🔹 Journalisation
+    await logAdminActivity(superadminId, "Réinitialisation du mot de passe réussie", req.ip, "Interface Web");
 
     res.json({ message: "Mot de passe mis à jour avec succès." });
   } catch (error) {
@@ -130,9 +139,9 @@ router.post("/superadmin-reset/confirm", async (req, res) => {
   }
 });
 
-// ================================
-// 👥 Gestion des administrateurs
-// ================================
+/* ============================================================
+   👥 Gestion des administrateurs
+============================================================ */
 router.post("/admins", verifyToken, async (req, res) => {
   const { name, email, role } = req.body;
 
@@ -147,7 +156,7 @@ router.post("/admins", verifyToken, async (req, res) => {
       [name, email, role]
     );
 
-    // Journaliser la création d’un admin
+    // 🔹 Journalisation
     await logAdminActivity(req.user.id, `Création de l’admin ${name}`, req.ip, "Dashboard");
 
     res.json(newAdmin.rows[0]);
@@ -172,7 +181,7 @@ router.delete("/admins/:id", verifyToken, async (req, res) => {
     const { id } = req.params;
     await pool.query("DELETE FROM admins WHERE id = $1", [id]);
 
-    // Journaliser la suppression
+    // 🔹 Journalisation
     await logAdminActivity(req.user.id, `Suppression de l’admin ID ${id}`, req.ip, "Dashboard");
 
     res.json({ message: "Administrateur supprimé avec succès." });
@@ -182,9 +191,9 @@ router.delete("/admins/:id", verifyToken, async (req, res) => {
   }
 });
 
-// ================================
-// 📊 Endpoint statistiques Dashboard
-// ================================
+/* ============================================================
+   📊 Endpoint statistiques Dashboard
+============================================================ */
 router.get("/dashboard-stats", verifyToken, async (req, res) => {
   try {
     const [admins, events, activities] = await Promise.all([
