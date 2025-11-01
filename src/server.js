@@ -7,11 +7,10 @@ import superAdminRoutes from "./routes/superAdminRoutes.js";
 dotenv.config();
 const app = express();
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Test de connexion PostgreSQL
+// Test DB
 try {
   await pool.connect();
   console.log("✅ Connecté à PostgreSQL (via DB_URL)");
@@ -19,7 +18,7 @@ try {
   console.error("❌ Erreur de connexion à PostgreSQL :", err.message);
 }
 
-// Route de base (ping)
+// Route de test
 app.get("/", (req, res) => {
   res.json({
     message: "Bienvenue sur l’API FORDAC SuperAdmin 🚀",
@@ -28,11 +27,8 @@ app.get("/", (req, res) => {
   });
 });
 
-// ✅ Toutes les routes SuperAdmin passent désormais par /api
+// ✅ toutes les routes SuperAdmin
 app.use("/api", superAdminRoutes);
 
-// Lancement du serveur
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`🚀 Serveur SuperAdmin démarré sur le port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Serveur SuperAdmin démarré sur le port ${PORT}`));
