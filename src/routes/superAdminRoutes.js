@@ -6,12 +6,87 @@ import { sendResetPasswordEmail } from "../services/mailService.js";
 
 const router = express.Router();
 
-// ✅ Vérification simple (pour test)
-router.get("/ping", (req, res) => {
-  res.json({ message: "Ping OK depuis superAdminRoutes" });
+console.log("✅ superAdminRoutes chargé !");
+
+// =============================
+// 🔐 Authentification SuperAdmin
+// =============================
+router.post("/superadmin/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const result = await pool.query("SELECT * FROM superadmins WHERE email = $1", [email]);
+    const user = result.rows[0];
+
+    if (!user) return res.status(404).json({ message: "Utilisateur introuvable" });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ message: "Mot de passe incorrect" });
+
+    return res.json({ message: "Connexion réussie", user });
+  } catch (err) {
+    console.error("Erreur login superadmin:", err);
+    return res.status(500).json({ message: "Erreur serveur." });
+  }
 });
 
-// ✅ Route testée : envoi mail de réinitialisation
+// =============================
+// 👥 Gestion des admins
+// =============================
+router.get("/admins", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM admins ORDER BY id DESC");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur récupération admins:", err);
+    res.status(500).json({ message: "Erreur lors de la récupération des admins." });
+  }
+});
+
+router.post("/admins", async (req, res) => {
+  const { name, email, role } = req.body;
+  try {
+    const result = await pool.query(
+      "INSERT INTO admins (name, email, role) VALUES ($1, $2, $3) RETURNING *",
+      [name, email, role]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur création admin:", err);
+    res.status(500).json({ message: "Erreur lors de la création de l’administrateur." });
+  }
+});
+
+// =============================
+// 📅 Gestion des événements
+// =============================
+router.get("/events", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM events ORDER BY id DESC");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur récupération événements:", err);
+    res.status(500).json({ message: "Erreur lors de la récupération des événements." });
+  }
+});
+
+router.post("/events", async (req, res) => {
+  const { title, date, description } = req.body;
+  try {
+    const result = await pool.query(
+      "INSERT INTO events (title, date, description) VALUES ($1, $2, $3) RETURNING *",
+      [title, date, description]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur création événement:", err);
+    res.status(500).json({ message: "Erreur lors de la création de l’événement." });
+  }
+});
+
+// =============================
+// 🔁 Réinitialisation du mot de passe SuperAdmin
+// =============================
 router.post("/superadmin-reset", async (req, res) => {
   const { email } = req.body;
 

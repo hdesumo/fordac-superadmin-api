@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Test DB
+// Test connexion PostgreSQL
 try {
   await pool.connect();
   console.log("✅ Connecté à PostgreSQL (via DB_URL)");
@@ -18,7 +18,7 @@ try {
   console.error("❌ Erreur de connexion à PostgreSQL :", err.message);
 }
 
-// Route de test
+// Route d’accueil (vérification API)
 app.get("/", (req, res) => {
   res.json({
     message: "Bienvenue sur l’API FORDAC SuperAdmin 🚀",
@@ -27,7 +27,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// ✅ toutes les routes SuperAdmin
+// ✅ Montage global de toutes les routes SuperAdmin sous /api
 app.use("/api", superAdminRoutes);
 
 const PORT = process.env.PORT || 8080;
