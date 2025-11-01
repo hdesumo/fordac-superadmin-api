@@ -23,6 +23,20 @@ const verifyToken = (req, res, next) => {
   });
 };
 
+// ======================================
+// 🪶 Fonction utilitaire : journaliser une action admin
+// ======================================
+async function logAdminActivity(adminId, action, ip, device) {
+  try {
+    await pool.query(
+      "INSERT INTO admin_activity (admin_id, action, ip_address, device) VALUES ($1, $2, $3, $4)",
+      [adminId, action, ip || "Inconnu", device || "Navigateur"]
+    );
+  } catch (error) {
+    console.error("⚠️ Erreur journalisation activité :", error.message);
+  }
+}
+
 // ================================
 // 🔑 Connexion du SuperAdmin
 // ================================
@@ -48,6 +62,9 @@ router.post("/superadmin-login", async (req, res) => {
       { expiresIn: "8h" }
     );
 
+    // Journalisation de la connexion
+    await logAdminActivity(user.id, "Connexion du SuperAdmin", req.ip, "Dashboard");
+
     res.json({
       message: "Connexion réussie",
       token,
@@ -60,14 +77,12 @@ router.post("/superadmin-login", async (req, res) => {
 });
 
 // ================================
-// 📬 Réinitialisation du mot de passe (envoi du lien)
+// 📬 Réinitialisation du mot de passe
 // ================================
 router.post("/superadmin-reset", async (req, res) => {
   const { email } = req.body;
 
   try {
-    console.log("📩 Requête reçue pour réinitialisation :", email);
-
     const result = await pool.query("SELECT * FROM superadmins WHERE email = $1", [email]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Adresse e-mail introuvable." });
@@ -81,14 +96,12 @@ router.post("/superadmin-reset", async (req, res) => {
       [resetToken, resetTokenExpires, email]
     );
 
-    // Envoi de l’e-mail via Gmail
     const resetLink = `https://fordac-superadmin.vercel.app/reset-password/confirm/${resetToken}`;
     await sendResetPasswordEmail(email, resetLink);
 
-    console.log("📨 Email de réinitialisation envoyé à", email);
     res.json({ message: "E-mail de réinitialisation envoyé avec succès." });
   } catch (error) {
-    console.error("Erreur dans superadmin-reset :", error);
+    console.error("Erreur superadmin-reset :", error);
     res.status(500).json({ message: "Erreur lors de l’envoi de l’e-mail." });
   }
 });
@@ -112,7 +125,7 @@ router.post("/superadmin-reset/confirm", async (req, res) => {
 
     res.json({ message: "Mot de passe mis à jour avec succès." });
   } catch (error) {
-    console.error("Erreur dans reset/confirm :", error);
+    console.error("Erreur reset/confirm :", error);
     res.status(400).json({ message: "Lien invalide ou expiré." });
   }
 });
@@ -134,9 +147,12 @@ router.post("/admins", verifyToken, async (req, res) => {
       [name, email, role]
     );
 
+    // Journaliser la création d’un admin
+    await logAdminActivity(req.user.id, `Création de l’admin ${name}`, req.ip, "Dashboard");
+
     res.json(newAdmin.rows[0]);
   } catch (error) {
-    console.error("Erreur lors de la création d’un administrateur :", error);
+    console.error("Erreur création admin :", error);
     res.status(500).json({ message: "Erreur lors de la création de l’administrateur." });
   }
 });
@@ -146,7 +162,7 @@ router.get("/admins", verifyToken, async (req, res) => {
     const result = await pool.query("SELECT * FROM admins ORDER BY id DESC");
     res.json(result.rows);
   } catch (error) {
-    console.error("Erreur lors du chargement des administrateurs :", error);
+    console.error("Erreur chargement admins :", error);
     res.status(500).json({ message: "Erreur serveur." });
   }
 });
@@ -155,6 +171,10 @@ router.delete("/admins/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     await pool.query("DELETE FROM admins WHERE id = $1", [id]);
+
+    // Journaliser la suppression
+    await logAdminActivity(req.user.id, `Suppression de l’admin ID ${id}`, req.ip, "Dashboard");
+
     res.json({ message: "Administrateur supprimé avec succès." });
   } catch (error) {
     console.error("Erreur suppression admin :", error);
@@ -185,5 +205,4 @@ router.get("/dashboard-stats", verifyToken, async (req, res) => {
   }
 });
 
-// ================================
 export default router;
