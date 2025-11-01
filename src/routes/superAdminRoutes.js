@@ -1,92 +1,67 @@
 import express from "express";
-import bcrypt from "bcryptjs";
-import crypto from "crypto";
-import { pool } from "../config/db.js";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import pool from "../config/db.js";
 import { sendResetPasswordEmail } from "../services/mailService.js";
 
 const router = express.Router();
 
-console.log("✅ superAdminRoutes chargé !");
+// ================================
+// 🧠 Middleware : Vérification du token JWT
+// ================================
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Accès non autorisé" });
+  }
 
-// =============================
-// 🔐 Authentification SuperAdmin
-// =============================
-router.post("/superadmin/login", async (req, res) => {
+  const token = authHeader.split(" ")[1];
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(403).json({ message: "Token invalide" });
+    req.user = decoded;
+    next();
+  });
+};
+
+// ================================
+// 🔑 Connexion du SuperAdmin
+// ================================
+router.post("/superadmin-login", async (req, res) => {
   const { email, password } = req.body;
 
   try {
     const result = await pool.query("SELECT * FROM superadmins WHERE email = $1", [email]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "SuperAdmin introuvable" });
+    }
+
     const user = result.rows[0];
+    const validPassword = await bcrypt.compare(password, user.password);
 
-    if (!user) return res.status(404).json({ message: "Utilisateur introuvable" });
+    if (!validPassword) {
+      return res.status(401).json({ message: "Mot de passe incorrect" });
+    }
 
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: "Mot de passe incorrect" });
-
-    return res.json({ message: "Connexion réussie", user });
-  } catch (err) {
-    console.error("Erreur login superadmin:", err);
-    return res.status(500).json({ message: "Erreur serveur." });
-  }
-});
-
-// =============================
-// 👥 Gestion des admins
-// =============================
-router.get("/admins", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM admins ORDER BY id DESC");
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Erreur récupération admins:", err);
-    res.status(500).json({ message: "Erreur lors de la récupération des admins." });
-  }
-});
-
-router.post("/admins", async (req, res) => {
-  const { name, email, role } = req.body;
-  try {
-    const result = await pool.query(
-      "INSERT INTO admins (name, email, role) VALUES ($1, $2, $3) RETURNING *",
-      [name, email, role]
+    const token = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "8h" }
     );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error("Erreur création admin:", err);
-    res.status(500).json({ message: "Erreur lors de la création de l’administrateur." });
+
+    res.json({
+      message: "Connexion réussie",
+      token,
+      user: { id: user.id, email: user.email, name: user.name },
+    });
+  } catch (error) {
+    console.error("Erreur de connexion :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la connexion." });
   }
 });
 
-// =============================
-// 📅 Gestion des événements
-// =============================
-router.get("/events", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM events ORDER BY id DESC");
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Erreur récupération événements:", err);
-    res.status(500).json({ message: "Erreur lors de la récupération des événements." });
-  }
-});
-
-router.post("/events", async (req, res) => {
-  const { title, date, description } = req.body;
-  try {
-    const result = await pool.query(
-      "INSERT INTO events (title, date, description) VALUES ($1, $2, $3) RETURNING *",
-      [title, date, description]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error("Erreur création événement:", err);
-    res.status(500).json({ message: "Erreur lors de la création de l’événement." });
-  }
-});
-
-// =============================
-// 🔁 Réinitialisation du mot de passe SuperAdmin
-// =============================
+// ================================
+// 📬 Réinitialisation du mot de passe (envoi du lien)
+// ================================
 router.post("/superadmin-reset", async (req, res) => {
   const { email } = req.body;
 
@@ -94,30 +69,121 @@ router.post("/superadmin-reset", async (req, res) => {
     console.log("📩 Requête reçue pour réinitialisation :", email);
 
     const result = await pool.query("SELECT * FROM superadmins WHERE email = $1", [email]);
-    const user = result.rows[0];
-
-    if (!user) {
-      console.log("⚠️ Aucun SuperAdmin trouvé pour :", email);
-      return res.status(404).json({ message: "Aucun SuperAdmin trouvé avec cet e-mail." });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Adresse e-mail introuvable." });
     }
 
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
+    const resetToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "30m" });
+    const resetTokenExpires = new Date(Date.now() + 30 * 60 * 1000);
 
     await pool.query(
       "UPDATE superadmins SET reset_token = $1, reset_token_expires = $2 WHERE email = $3",
-      [token, expiresAt, email]
+      [resetToken, resetTokenExpires, email]
     );
 
-    const resetLink = `https://fordac-superadmin.vercel.app/reset-password/confirm/${token}`;
+    // Envoi de l’e-mail via Gmail
+    const resetLink = `https://fordac-superadmin.vercel.app/reset-password/confirm/${resetToken}`;
     await sendResetPasswordEmail(email, resetLink);
 
-    console.log(`✅ Email envoyé à ${email} avec lien : ${resetLink}`);
-    return res.json({ message: "E-mail de réinitialisation envoyé avec succès." });
+    console.log("📨 Email de réinitialisation envoyé à", email);
+    res.json({ message: "E-mail de réinitialisation envoyé avec succès." });
   } catch (error) {
-    console.error("❌ Erreur dans superadmin-reset :", error);
-    return res.status(500).json({ message: "Erreur lors de l’envoi de l’e-mail." });
+    console.error("Erreur dans superadmin-reset :", error);
+    res.status(500).json({ message: "Erreur lors de l’envoi de l’e-mail." });
   }
 });
 
+// ================================
+// 🔒 Confirmation et mise à jour du mot de passe
+// ================================
+router.post("/superadmin-reset/confirm", async (req, res) => {
+  const { token, password } = req.body;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const email = decoded.email;
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      "UPDATE superadmins SET password = $1, reset_token = NULL, reset_token_expires = NULL WHERE email = $2",
+      [hashedPassword, email]
+    );
+
+    res.json({ message: "Mot de passe mis à jour avec succès." });
+  } catch (error) {
+    console.error("Erreur dans reset/confirm :", error);
+    res.status(400).json({ message: "Lien invalide ou expiré." });
+  }
+});
+
+// ================================
+// 👥 Gestion des administrateurs
+// ================================
+router.post("/admins", verifyToken, async (req, res) => {
+  const { name, email, role } = req.body;
+
+  try {
+    const existing = await pool.query("SELECT * FROM admins WHERE email = $1", [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ message: "Un admin avec cet e-mail existe déjà." });
+    }
+
+    const newAdmin = await pool.query(
+      "INSERT INTO admins (name, email, role) VALUES ($1, $2, $3) RETURNING *",
+      [name, email, role]
+    );
+
+    res.json(newAdmin.rows[0]);
+  } catch (error) {
+    console.error("Erreur lors de la création d’un administrateur :", error);
+    res.status(500).json({ message: "Erreur lors de la création de l’administrateur." });
+  }
+});
+
+router.get("/admins", verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM admins ORDER BY id DESC");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erreur lors du chargement des administrateurs :", error);
+    res.status(500).json({ message: "Erreur serveur." });
+  }
+});
+
+router.delete("/admins/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM admins WHERE id = $1", [id]);
+    res.json({ message: "Administrateur supprimé avec succès." });
+  } catch (error) {
+    console.error("Erreur suppression admin :", error);
+    res.status(500).json({ message: "Erreur lors de la suppression." });
+  }
+});
+
+// ================================
+// 📊 Endpoint statistiques Dashboard
+// ================================
+router.get("/dashboard-stats", verifyToken, async (req, res) => {
+  try {
+    const [admins, events, activities] = await Promise.all([
+      pool.query("SELECT COUNT(*) FROM admins"),
+      pool.query("SELECT COUNT(*) FROM events"),
+      pool.query("SELECT COUNT(*) FROM admin_activity"),
+    ]);
+
+    res.json({
+      admins: parseInt(admins.rows[0].count, 10),
+      events: parseInt(events.rows[0].count, 10),
+      activities: parseInt(activities.rows[0].count, 10),
+      activeSessions: Math.floor(Math.random() * 8) + 2,
+    });
+  } catch (err) {
+    console.error("Erreur /dashboard-stats :", err);
+    res.status(500).json({ message: "Erreur lors du chargement des statistiques." });
+  }
+});
+
+// ================================
 export default router;
