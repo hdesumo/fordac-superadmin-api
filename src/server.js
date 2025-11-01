@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { pool } from "./config/db.js"; // ✅ correspond à export const pool dans db.js
 import superAdminRoutes from "./routes/superAdminRoutes.js";
+import adminActivityRoutes from "./routes/adminActivityRoutes.js";
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ app.get("/", (req, res) => {
 // 🛣️ Routes principales
 // ===============================
 app.use("/api/superadmin", superAdminRoutes);
+app.use("/api/admin-activity", adminActivityRoutes);
 
 // ===============================
 // 🚀 Lancement du serveur
