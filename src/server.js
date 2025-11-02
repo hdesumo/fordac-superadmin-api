@@ -1,34 +1,52 @@
+// src/server.js
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { pool } from "./config/db.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
+import departmentsRoutes from "./routes/departmentsRoutes.js";
 
 dotenv.config();
 const app = express();
+const PORT = process.env.PORT || 5002;
 
+// ✅ Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Test connexion PostgreSQL
-try {
-  await pool.connect();
-  console.log("✅ Connecté à PostgreSQL (via DB_URL)");
-} catch (err) {
-  console.error("❌ Erreur de connexion à PostgreSQL :", err.message);
-}
+// ✅ Vérification de la connexion PostgreSQL
+(async () => {
+  try {
+    const client = await pool.connect();
+    console.log("✅ Connecté à PostgreSQL (via DB_URL)");
+    client.release();
+  } catch (err) {
+    console.error("❌ Erreur de connexion à PostgreSQL :", err.message);
+  }
+})();
 
-// Route d’accueil (vérification API)
+// ✅ Routes API
+app.use("/api", superAdminRoutes);
+app.use("/api", departmentsRoutes);
+
+// ✅ Route de test racine
 app.get("/", (req, res) => {
   res.json({
     message: "Bienvenue sur l’API FORDAC SuperAdmin 🚀",
-    version: "1.0.0",
+    version: "1.1.0",
     status: "running",
   });
 });
 
-// ✅ Montage global de toutes les routes SuperAdmin sous /api
-app.use("/api", superAdminRoutes);
+// ✅ Gestion 404
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Route non trouvée",
+    path: req.originalUrl,
+  });
+});
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`🚀 Serveur SuperAdmin démarré sur le port ${PORT}`));
+// ✅ Lancement du serveur
+app.listen(PORT, () => {
+  console.log(`🚀 Serveur SuperAdmin démarré sur le port ${PORT}`);
+});
