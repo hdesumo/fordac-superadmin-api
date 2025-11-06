@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { pool } from "../config/db.js";
 import { sendResetPasswordEmail } from "../services/mailService.js";
+import { getDashboardStats } from "../controllers/superAdminController.js"; // ✅ ajout pour le dashboard
 
 const router = express.Router();
 
@@ -89,21 +90,27 @@ router.post("/superadmin-reset", async (req, res) => {
 });
 
 // =========================================
-// 🧾 Logs d’activité
+// 🧾 Logs d’activité (corrigé : admin_activities)
 // =========================================
-router.get("/admin-activity", async (req, res) => {
+router.get("/admin-activities", async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT a.id, a.action, a.ip_address, a.created_at, ad.name AS admin_name
-       FROM admin_activity a
-       LEFT JOIN admins ad ON ad.id = a.admin_id
-       ORDER BY a.created_at DESC`
-    );
+    const result = await pool.query(`
+      SELECT a.id, a.action, a.ip_address, a.created_at, ad.name AS admin_name
+      FROM admin_activities a
+      LEFT JOIN admins ad ON ad.id = a.admin_id
+      ORDER BY a.created_at DESC
+      LIMIT 50;
+    `);
     res.json(result.rows);
   } catch (error) {
     console.error("Erreur lors de la récupération des logs :", error);
     res.status(500).json({ message: "Erreur serveur lors de la récupération." });
   }
 });
+
+// =========================================
+// 📊 Dashboard global du SuperAdmin
+// =========================================
+router.get("/superadmin/dashboard", getDashboardStats);
 
 export default router;
