@@ -1,68 +1,92 @@
-// ==========================================
-// controllers/activityController.js
-// ==========================================
-
-import { pool } from "../config/db.js";
+// src/controllers/activityController.js
+import pool from "../config/db.js";
 
 /**
- * @desc  Récupère les dernières activités des admins
- * @route GET /api/admin-activities
- * @access SuperAdmin
+ * 🧩 Récupérer toutes les activités des admins
+ * Retourne la liste complète des logs (admin, action, IP, date)
  */
-export const getAdminActivities = async (req, res) => {
+export const getActivities = async (req, res) => {
   try {
-    // 🔹 Lecture des paramètres de filtre optionnels
-    const { admin_id, action, limit = 20 } = req.query;
+    const result = await pool.query(
+      `SELECT 
+         a.id,
+         ad.name AS admin_name,
+         a.action,
+         a.ip_address,
+         a.created_at
+       FROM admin_activity a
+       LEFT JOIN admins ad ON a.admin_id = ad.id
+       ORDER BY a.created_at DESC`
+    );
 
-    let baseQuery = `
-      SELECT 
-        a.id,
-        a.admin_id,
-        ad.name AS admin_name,
-        a.action,
-        a.ip_address,
-        a.created_at
-      FROM admin_activities a
-      LEFT JOIN admins ad ON a.admin_id = ad.id
-      WHERE 1=1
-    `;
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Erreur lors de la récupération des activités :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
 
-    const queryParams = [];
+/**
+ * 🧠 Récupérer les 10 dernières activités
+ */
+export const getRecentActivities = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT 
+         a.id,
+         ad.name AS admin_name,
+         a.action,
+         a.ip_address,
+         a.created_at
+       FROM admin_activity a
+       LEFT JOIN admins ad ON a.admin_id = ad.id
+       ORDER BY a.created_at DESC
+       LIMIT 10`
+    );
 
-    // 🔹 Filtre par admin
-    if (admin_id) {
-      queryParams.push(admin_id);
-      baseQuery += ` AND a.admin_id = $${queryParams.length}`;
-    }
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des dernières activités :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
 
-    // 🔹 Filtre par type d’action
-    if (action) {
-      queryParams.push(action);
-      baseQuery += ` AND a.action ILIKE $${queryParams.length}`;
-    }
+/**
+ * ✏️ Ajouter une nouvelle activité
+ * Utilisé lorsqu’un admin crée, modifie, supprime ou se connecte
+ */
+export const addActivity = async (req, res) => {
+  const { admin_id, action, ip_address } = req.body;
 
-    // 🔹 Ordre décroissant (les plus récentes d’abord)
-    baseQuery += ` ORDER BY a.created_at DESC`;
+  if (!admin_id || !action) {
+    return res.status(400).json({ message: "admin_id et action sont requis" });
+  }
 
-    // 🔹 Limite du nombre de résultats
-    queryParams.push(limit);
-    baseQuery += ` LIMIT $${queryParams.length}`;
+  try {
+    const result = await pool.query(
+      `INSERT INTO admin_activity (admin_id, action, ip_address, created_at)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING *`,
+      [admin_id, action, ip_address || "unknown"]
+    );
 
-    const { rows } = await pool.query(baseQuery, queryParams);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur lors de l’ajout de l’activité :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
 
-    // ✅ Réponse JSON complète
-    res.status(200).json({
-      success: true,
-      count: rows.length,
-      activities: rows,
-    });
-
-  } catch (error) {
-    console.error("❌ Erreur dans getAdminActivities :", error.message);
-    res.status(500).json({
-      success: false,
-      message: "Erreur lors de la récupération des activités",
-      error: error.message,
-    });
+/**
+ * 🧹 Supprimer toutes les activités (pour maintenance)
+ * ⚠️ Action réservée au SuperAdmin
+ */
+export const clearActivities = async (req, res) => {
+  try {
+    await pool.query("TRUNCATE TABLE admin_activity RESTART IDENTITY CASCADE");
+    res.json({ message: "Historique des activités effacé avec succès ✅" });
+  } catch (err) {
+    console.error("Erreur lors du nettoyage des activités :", err);
+    res.status(500).json({ message: "Erreur serveur lors du nettoyage des activités" });
   }
 };
