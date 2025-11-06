@@ -1,13 +1,20 @@
-// ========================================
-// routes/activityRoutes.js
-// ========================================
+import express from "express";
+import {
+  getAllActivities,
+  createActivity,
+  clearActivities,
+} from "../controllers/activityController.js";
+import { verifyToken } from "../middleware/authMiddleware.js";
 
-const express = require("express");
 const router = express.Router();
-const { getAdminActivities } = require("../controllers/activityController");
 
-// ✅ Route pour récupérer les 20 dernières activités des admins
-// URL complète : https://api-superadmin.fordac-connect.org/api/admin-activities
-router.get("/admin-activities", getAdminActivities);
+// ✅ Récupérer toutes les activités
+router.get("/", verifyToken, getAllActivities);
 
-module.exports = router;
+// ✅ Créer une nouvelle activité
+router.post("/", verifyToken, createActivity);
+
+// ✅ (Optionnel) Vider le journal
+router.delete("/", verifyToken, clearActivities);
+
+export default router;
