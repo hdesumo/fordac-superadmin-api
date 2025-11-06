@@ -1,27 +1,16 @@
-// src/config/db.js
-import pkg from "pg";
-import dotenv from "dotenv";
-dotenv.config();
+import mysql from "mysql2/promise";
 
-const { Pool } = pkg;
-
-// 🔍 Parse proprement l’URL en string
-const connectionString = String(process.env.DB_URL).trim();
-
-const pool = new Pool({
-  connectionString,
-  ssl: { rejectUnauthorized: false },
+// ✅ Création d’un pool de connexions MySQL (compatible Railway)
+export const pool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "fordac_superadmin",
+  port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
-// ✅ Vérification connexion
-pool
-  .connect()
-  .then((client) => {
-    console.log("✅ Connecté à PostgreSQL (via DB_URL)");
-    client.release();
-  })
-  .catch((err) => {
-    console.error("❌ Erreur de connexion à PostgreSQL :", err.message);
-  });
-
-export default pool; // ✅ Ajout de l’export par défaut
+// ✅ Export par défaut (facultatif, pour compatibilité)
+export default pool;
