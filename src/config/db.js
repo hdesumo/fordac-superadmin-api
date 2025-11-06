@@ -1,3 +1,4 @@
+// src/config/db.js
 import pkg from "pg";
 import dotenv from "dotenv";
 dotenv.config();
@@ -7,7 +8,7 @@ const { Pool } = pkg;
 // 🔍 Parse proprement l’URL en string
 const connectionString = String(process.env.DB_URL).trim();
 
-export const pool = new Pool({
+const pool = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
 });
@@ -22,3 +23,5 @@ pool
   .catch((err) => {
     console.error("❌ Erreur de connexion à PostgreSQL :", err.message);
   });
+
+export default pool; // ✅ Ajout de l’export par défaut
