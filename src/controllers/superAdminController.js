@@ -1,75 +1,137 @@
-// ==========================================
-// controllers/superAdminController.js
-// ==========================================
-
-import { pool } from "../config/db.js";
+// src/controllers/superAdminController.js
+import pool from "../config/db.js";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
 /**
- * @desc Récupère les statistiques globales du tableau de bord SuperAdmin
- * @route GET /api/superadmin/dashboard
- * @access SuperAdmin
+ * 🧩 Connexion du SuperAdmin
+ * Vérifie l'email et le mot de passe, renvoie un token JWT
  */
-export const getDashboardStats = async (req, res) => {
+export const loginSuperAdmin = async (req, res) => {
+  const { email, password } = req.body;
+
   try {
-    // 🔹 Nombre total d’admins
-    const totalAdminsQuery = await pool.query(`SELECT COUNT(*) AS total_admins FROM admins;`);
-    const totalAdmins = parseInt(totalAdminsQuery.rows[0].total_admins, 10);
+    const result = await pool.query(
+      "SELECT * FROM superadmins WHERE email = $1 LIMIT 1",
+      [email]
+    );
 
-    // 🔹 Nombre total de départements
-    const totalDepartmentsQuery = await pool.query(`SELECT COUNT(DISTINCT department) AS total_departments FROM admins;`);
-    const totalDepartments = parseInt(totalDepartmentsQuery.rows[0].total_departments, 10);
-
-    // 🔹 Nombre total d’événements (si la table existe)
-    let totalEvents = 0;
-    try {
-      const totalEventsQuery = await pool.query(`SELECT COUNT(*) AS total_events FROM events;`);
-      totalEvents = parseInt(totalEventsQuery.rows[0].total_events, 10);
-    } catch {
-      // La table events n'existe peut-être pas encore — on ignore cette erreur.
-      totalEvents = 0;
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "SuperAdmin non trouvé ❌" });
     }
 
-    // 🔹 10 dernières activités
-    const recentActivitiesQuery = await pool.query(`
-      SELECT 
-        a.id,
-        ad.name AS admin_name,
-        a.action,
-        a.ip_address,
-        a.created_at
-      FROM admin_activities a
-      LEFT JOIN admins ad ON a.admin_id = ad.id
-      ORDER BY a.created_at DESC
-      LIMIT 10;
-    `);
-    const recentActivities = recentActivitiesQuery.rows;
+    const superadmin = result.rows[0];
 
-    // 🔹 Répartition des actions pour graphique Recharts
-    const activityCountQuery = await pool.query(`
-      SELECT action, COUNT(*) AS total
-      FROM admin_activities
-      GROUP BY action
-      ORDER BY total DESC;
-    `);
-    const activitySummary = activityCountQuery.rows;
+    // Vérification du mot de passe
+    const isMatch = await bcrypt.compare(password, superadmin.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Mot de passe incorrect 🚫" });
+    }
 
-    // ✅ Envoi au frontend
-    res.status(200).json({
-      success: true,
-      stats: {
-        totalAdmins,
-        totalDepartments,
-        totalEvents,
+    // Création du token JWT
+    const token = jwt.sign(
+      { id: superadmin.id, email: superadmin.email, role: "superadmin" },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      message: "Connexion réussie ✅",
+      token,
+      superadmin: {
+        id: superadmin.id,
+        name: superadmin.name,
+        email: superadmin.email,
       },
-      recentActivities,
-      activitySummary,
     });
-  } catch (error) {
-    console.error("❌ Erreur dans getDashboardStats :", error.message);
-    res.status(500).json({
-      success: false,
-      message: "Erreur lors de la récupération des statistiques du dashboard",
-      error: error.message,
+  } catch (err) {
+    console.error("Erreur lors de la connexion du SuperAdmin :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * 👤 Créer un nouvel admin
+ */
+export const createAdmin = async (req, res) => {
+  const { name, email, department, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: "Champs manquants ❌" });
+  }
+
+  try {
+    // Vérifie si l'email existe déjà
+    const existing = await pool.query(
+      "SELECT * FROM admins WHERE email = $1",
+      [email]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ message: "Cet email est déjà utilisé ⚠️" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      "INSERT INTO admins (name, email, department, password, created_at, status) VALUES ($1, $2, $3, $4, NOW(), 'active') RETURNING *",
+      [name, email, department, hashedPassword]
+    );
+
+    res.status(201).json({
+      message: "Admin créé avec succès ✅",
+      admin: result.rows[0],
     });
+  } catch (err) {
+    console.error("Erreur lors de la création d’un admin :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * 📊 Liste complète des admins
+ */
+export const getAllAdmins = async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM admins ORDER BY id ASC");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des admins :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * 🧠 Supprimer un admin
+ */
+export const deleteAdmin = async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM admins WHERE id = $1", [id]);
+    res.json({ message: "Admin supprimé avec succès 🗑️" });
+  } catch (err) {
+    console.error("Erreur lors de la suppression de l’admin :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * 🚀 Infos du SuperAdmin (profil)
+ */
+export const getSuperAdminProfile = async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, name, email FROM superadmins WHERE id = $1",
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Profil introuvable ❌" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Erreur lors de la récupération du profil SuperAdmin :", err);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
