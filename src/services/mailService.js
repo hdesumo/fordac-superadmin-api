@@ -1,4 +1,3 @@
-// src/services/mailService.js
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 
@@ -57,6 +56,56 @@ export async function sendResetPasswordEmail(email, token) {
     return true;
   } catch (error) {
     console.error("❌ Erreur lors de l’envoi de l’e-mail :", error.message);
+    return false;
+  }
+}
+
+/**
+ * ===========================================================
+ * ✉️ ENVOI D’UN EMAIL DE CRÉATION DE COMPTE ADMINISTRATEUR
+ * ===========================================================
+ *
+ * @param {string} to - Adresse de l’admin créé
+ * @param {string} name - Nom complet de l’administrateur
+ * @param {string} password - Mot de passe temporaire
+ */
+export async function sendAdminCreationEmail(to, name, password) {
+  const loginLink = `https://fordac-superadmin.vercel.app`;
+
+  const mailOptions = {
+    from: `"FORDAC Administration" <${process.env.SMTP_EMAIL}>`,
+    to,
+    subject: "👋 Bienvenue dans FORDAC Connect - Votre compte administrateur",
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #333;">
+        <h2 style="color:#C1121F;">Bienvenue ${name} !</h2>
+        <p>Votre compte administrateur a été créé avec succès sur <strong>FORDAC Connect</strong>.</p>
+        <p>Voici vos identifiants de connexion :</p>
+        <ul style="background:#f9f9f9;padding:15px;border-radius:8px;line-height:1.8;">
+          <li><b>Email :</b> ${to}</li>
+          <li><b>Mot de passe temporaire :</b> ${password}</li>
+        </ul>
+        <p>👉 Vous pouvez vous connecter en cliquant ci-dessous :</p>
+        <p style="margin: 30px 0;">
+          <a href="${loginLink}" style="background-color:#C1121F;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">
+            🔑 Se connecter à FORDAC SuperAdmin
+          </a>
+        </p>
+        <p>Pensez à modifier votre mot de passe après la première connexion.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:30px 0;" />
+        <p style="font-size:12px;color:#777;">
+          Cet e-mail a été envoyé automatiquement par FORDAC SuperAdmin.
+        </p>
+      </div>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`📧 E-mail de création envoyé à ${to} : ${info.response}`);
+    return true;
+  } catch (error) {
+    console.error("❌ Erreur lors de l’envoi de l’e-mail de création :", error.message);
     return false;
   }
 }
