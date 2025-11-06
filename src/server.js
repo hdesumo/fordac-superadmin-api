@@ -13,12 +13,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Vérification rapide de la base
+// ✅ Vérification de la base PostgreSQL
 try {
-  const [rows] = await pool.query("SELECT 1");
-  console.log("✅ Connexion MySQL établie");
+  const result = await pool.query("SELECT NOW()");
+  console.log("✅ PostgreSQL connecté :", result.rows[0].now);
 } catch (err) {
-  console.error("❌ Erreur MySQL :", err.message);
+  console.error("❌ Erreur de connexion PostgreSQL :", err.message);
 }
 
 // ✅ Routes principales
@@ -26,10 +26,10 @@ app.use("/api/superadmin", superAdminRoutes);
 app.use("/api/activities", activityRoutes);
 app.use("/api/auth", authRoutes);
 
-// ✅ Port dynamique Railway ou local
+// ✅ Port Railway ou local
 const PORT = process.env.PORT || 8080;
 
-// ✅ Route de test
+// ✅ Route test
 app.get("/", (req, res) => {
   res.json({ message: "Bienvenue sur l’API FORDAC SuperAdmin", version: "1.0.0" });
 });
