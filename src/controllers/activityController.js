@@ -41,3 +41,14 @@ export const getAllActivities = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur.", error: error.message });
   }
 };
+
+// ✅ Effacer toutes les activités
+export const clearActivities = async (req, res) => {
+  try {
+    await pool.query(`TRUNCATE TABLE activities`);
+    res.status(200).json({ message: "Toutes les activités ont été supprimées." });
+  } catch (error) {
+    console.error("Erreur lors du nettoyage des activités :", error);
+    res.status(500).json({ message: "Erreur serveur.", error: error.message });
+  }
+};
