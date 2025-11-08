@@ -1,40 +1,61 @@
+// src/server.js
 import express from "express";
 import cors from "cors";
+import bodyParser from "body-parser";
 import dotenv from "dotenv";
-import { pool } from "./config/db.js";
-
+import pkg from "pg";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
-import activityRoutes from "./routes/activityRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
 
 dotenv.config();
-
+const { Pool } = pkg;
 const app = express();
+
+// ------------------------------
+// 🔧 Middlewares
+// ------------------------------
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// ✅ Vérification de la base PostgreSQL
-try {
-  const result = await pool.query("SELECT NOW()");
-  console.log("✅ PostgreSQL connecté :", result.rows[0].now);
-} catch (err) {
-  console.error("❌ Erreur de connexion PostgreSQL :", err.message);
-}
-
-// ✅ Routes principales
-app.use("/api/superadmin", superAdminRoutes);
-app.use("/api/activities", activityRoutes);
-app.use("/api/auth", authRoutes);
-
-// ✅ Port Railway ou local
-const PORT = process.env.PORT || 8080;
-
-// ✅ Route test
-app.get("/", (req, res) => {
-  res.json({ message: "Bienvenue sur l’API FORDAC SuperAdmin", version: "1.0.0" });
+// ------------------------------
+// 🔧 Configuration PostgreSQL
+// ------------------------------
+const useSSL = process.env.DB_USE_SSL === "true";
+export const pool = new Pool({
+  connectionString: process.env.DB_URL,
+  ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
 
-// ✅ Lancement du serveur
+pool.connect()
+  .then(() => {
+    console.log("✅ Connexion PostgreSQL réussie !");
+    console.log(`🔐 SSL activé : ${useSSL}`);
+  })
+  .catch((err) => {
+    console.error("❌ Erreur de connexion PostgreSQL :", err.message);
+  });
+
+// ------------------------------
+// 🚀 Route de test
+// ------------------------------
+app.get("/", (req, res) => {
+  res.json({
+    message: "Bienvenue sur l’API SuperAdmin FORDAC Connect 🚀",
+    version: "1.0.0",
+    author: "Apps 1 Global",
+  });
+});
+
+// ------------------------------
+// ✅ Routes SuperAdmin
+// ------------------------------
+app.use("/api/superadmin", superAdminRoutes);
+
+// ------------------------------
+// ▶️ Lancement du serveur
+// ------------------------------
+const PORT = process.env.PORT || 5002;
 app.listen(PORT, () => {
   console.log(`🚀 Serveur en écoute sur le port ${PORT}`);
+  console.log(`🌐 Environnement : ${process.env.NODE_ENV || "local"}`);
 });
