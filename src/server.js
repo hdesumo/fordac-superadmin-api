@@ -1,40 +1,56 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import pool from "./config/db.js";
+import path from "path";
+import { fileURLToPath } from "url";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
 
 dotenv.config();
 
 const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Middleware
-app.use(cors());
+// ✅ Middleware
 app.use(express.json());
 
-// Routes
-app.use("/api/superadmin", superAdminRoutes);
+// ✅ Configuration CORS renforcée
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://fordac-superadmin-frontend.vercel.app",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+    credentials: true,
+  })
+);
 
-// Vérification PostgreSQL
-const connectDB = async () => {
-  try {
-    const client = await pool.connect();
-    const now = await client.query("SELECT NOW()");
-    console.log("✅ Connexion PostgreSQL réussie !");
-    console.log("🕒 Heure serveur :", now.rows[0].now);
-    client.release();
-  } catch (error) {
-    console.error("❌ Erreur de connexion PostgreSQL :", error.message);
-  }
-};
-
-// Lancement du serveur
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, async () => {
-  console.log(`🚀 Serveur en écoute sur le port ${PORT}`);
-  console.log(`🌐 Environnement : ${process.env.NODE_ENV || "local"}`);
-  console.log(`🔐 SSL activé : ${process.env.DB_USE_SSL}`);
-  await connectDB();
+// ✅ Routes principales
+app.get("/", (req, res) => {
+  res.json({
+    message: "Bienvenue sur l’API FORDAC SuperAdmin",
+    version: "1.0.0",
+    author: "Apps 1 Global",
+  });
 });
 
-export default app;
+app.use("/api/superadmin", superAdminRoutes);
+
+// ✅ Middleware d’erreur
+app.use((err, req, res, next) => {
+  console.error("Erreur serveur :", err);
+  res.status(500).json({ error: "Erreur interne du serveur." });
+});
+
+// ✅ Démarrage du serveur
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`🚀 Serveur en écoute sur le port ${PORT}`);
+});
