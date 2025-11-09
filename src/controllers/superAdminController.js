@@ -1,37 +1,42 @@
+import pool from "../config/db.js";
+import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
-import { pool } from "../server.js";
 
+/**
+ * Connexion du SuperAdmin
+ */
 export const loginSuperAdmin = async (req, res) => {
-  const { email, password } = req.body;
-
   try {
+    const { email, password } = req.body;
+
+    // Vérification des champs
     if (!email || !password) {
       return res.status(400).json({ message: "Email et mot de passe requis" });
     }
 
-    const query = "SELECT * FROM superadmins WHERE email = $1";
-    const result = await pool.query(query, [email]);
-
+    // Recherche du SuperAdmin
+    const result = await pool.query("SELECT * FROM superadmins WHERE email = $1", [email]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "SuperAdmin introuvable" });
     }
 
     const superadmin = result.rows[0];
 
-    // Comparaison du mot de passe en clair (pas de hash ici, tu confirmes)
-    if (password !== superadmin.password) {
+    // Comparaison bcrypt
+    const valid = await bcrypt.compare(password, superadmin.password);
+    if (!valid) {
       return res.status(401).json({ message: "Mot de passe incorrect" });
     }
 
-    // Génération du token JWT
+    // Création du token JWT
     const token = jwt.sign(
       { id: superadmin.id, email: superadmin.email },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "7d" }
     );
 
-    res.json({
+    // Réponse
+    return res.status(200).json({
       message: "Connexion réussie",
       token,
       superadmin: {
@@ -41,7 +46,24 @@ export const loginSuperAdmin = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Erreur lors de la connexion SuperAdmin :", error.message);
-    res.status(500).json({ message: "Erreur interne du serveur" });
+    console.error("Erreur lors de la connexion SuperAdmin :", error);
+    return res.status(500).json({ message: "Erreur interne du serveur" });
+  }
+};
+
+/**
+ * Exemple : récupération des infos SuperAdmin
+ */
+export const getSuperAdminProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query("SELECT id, name, email FROM superadmins WHERE id = $1", [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "SuperAdmin introuvable" });
+    }
+    return res.status(200).json(result.rows[0]);
+  } catch (error) {
+    console.error("Erreur lors de la récupération du profil :", error);
+    return res.status(500).json({ message: "Erreur serveur" });
   }
 };
